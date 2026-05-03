@@ -31,7 +31,10 @@ def get_data(symbol, interval):
         return None
 
     df = pd.DataFrame(r["values"])
-    df = df.astype(float)
+  for col in ["open", "high", "low", "close", "volume"]:
+    df[col] = pd.to_numeric(df[col], errors="coerce")
+
+df = df.dropna()
     df = df.iloc[::-1]
     return df
 
