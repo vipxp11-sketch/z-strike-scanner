@@ -1,10 +1,8 @@
 import streamlit as st
 import pandas as pd
 import requests
-from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(layout="wide")
-
 st.title("🔥 Z-Sweep Scanner V4 (Live Data)")
 
 # =========================
@@ -13,10 +11,9 @@ st.title("🔥 Z-Sweep Scanner V4 (Live Data)")
 api_key = st.sidebar.text_input("Twelve Data API Key", type="password")
 
 # =========================
-# ⏱️ Auto Refresh
+# ⏱️ Refresh
 # =========================
 refresh = st.sidebar.selectbox("Auto Refresh (sec)", [15,30,60], index=1)
-st_autorefresh(interval=refresh * 1000, key="refresh")
 
 symbols = st.text_input("Symbols", "SPY,QQQ,NVDA,TSLA,AMD").split(",")
 
@@ -26,6 +23,15 @@ symbols = st.text_input("Symbols", "SPY,QQQ,NVDA,TSLA,AMD").split(",")
 def get_data(symbol, interval):
     url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize=10&apikey={api_key}"
     r = requests.get(url).json()
+
+    # أخطاء API
+    if "message" in r:
+        st.error(f"{symbol}: {r['message']}")
+        return None
+
+    if "status" in r and r["status"] == "error":
+        st.error(f"{symbol}: {r}")
+        return None
 
     if "values" not in r:
         return None
@@ -65,7 +71,6 @@ def analyze(df):
     close_pct = ((curr["close"] - prev["low"]) / rng * 100) if rng != 0 else 0
 
     vol = "⬆️" if curr["volume"] > prev["volume"] else "⬇️"
-
     prev_color = "🟢" if prev["close"] > prev["open"] else "🔴"
 
     grade = "Fake"
@@ -87,6 +92,7 @@ def analyze(df):
 
     return {
         "Sweep": sweep,
+        "Direction": direction,
         "Close%": round(close_pct,1),
         "Vol": vol,
         "Grade": grade,
@@ -105,13 +111,25 @@ if api_key:
         df = get_data(sym, "5min")
         res = analyze(df)
 
-        if res and res["Grade"] == "A+":
+        if res:
             rows.append({
                 "Symbol": sym,
                 **res
             })
 
+# =========================
+# 📊 Output
+# =========================
 if rows:
-    st.dataframe(pd.DataFrame(rows))
+    df_out = pd.DataFrame(rows)
+
+    st.subheader("📊 Scanner Results")
+    st.dataframe(df_out, use_container_width=True)
+
+    # فلترة A+
+    a_plus = df_out[df_out["Grade"] == "A+"]
+    if not a_plus.empty:
+        st.success("🔥 A+ Setups")
+        st.dataframe(a_plus, use_container_width=True)
 else:
-    st.warning("No A+ setups")
+    st.warning("⚠️ No data. Check API key or symbols.")
